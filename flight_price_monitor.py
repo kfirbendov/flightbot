@@ -166,8 +166,11 @@ def fetch_prices_from_page(url: str) -> list[int]:
         page_title = page.title()
         browser.close()
 
-    # תבניות אפשריות: "₪1,234" / "₪ 1,234" / "1,234 ₪"
-    matches = re.findall(r"₪\s?([\d,]{3,7})|([\d,]{3,7})\s?₪", body_text)
+    # תבניות אפשריות: "₪1,234" / "₪ 1,234" / "1,234 ₪" / "1,234\u200f ₪"
+    # (גוגל לפעמים מכניס תווי כיווניות בלתי-נראים כמו \u200e/\u200f בין המספר לסמל)
+    FILLER = r"[\s\u200e\u200f\ufeff]*"
+    pattern = rf"₪{FILLER}([\d,]{{3,7}})|([\d,]{{3,7}}){FILLER}₪"
+    matches = re.findall(pattern, body_text)
     prices = []
     for a, b in matches:
         raw = a or b
