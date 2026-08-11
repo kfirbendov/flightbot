@@ -131,6 +131,27 @@ def fetch_prices_from_page(url: str) -> list[int]:
         page = context.new_page()
         log.info("Loading page...")
         page.goto(url, timeout=45000)
+        page.wait_for_timeout(2000)
+
+        # גוגל לעיתים מציג מסך הסכמה לעוגיות ("Before you continue to Google")
+        # לפני התוכן עצמו, במיוחד בדפדפן טרי בלי עוגיות קודמות. מנסים ללחוץ
+        # על כפתור ההסכמה אם הוא מופיע - זו כנראה הסיבה העיקרית לכישלונות.
+        consent_selectors = [
+            "#L2AGLb",  # ה-id הקבוע של כפתור "I agree" במסך ההסכמה של גוגל
+            "button:has-text('I agree')",
+            "button:has-text('Accept all')",
+            "button:has-text('אני מסכים')",
+            "button:has-text('קבל הכול')",
+            "form[action*='consent'] button",
+        ]
+        for sel in consent_selectors:
+            try:
+                page.click(sel, timeout=3000)
+                log.info(f"Clicked consent button ({sel})")
+                page.wait_for_timeout(2000)
+                break
+            except Exception:
+                continue
 
         # מחכים שהתוצאות ייטענו (גוגל פלייטס טוען אסינכרונית)
         page.wait_for_timeout(PAGE_LOAD_WAIT_SECONDS * 1000)
@@ -142,6 +163,7 @@ def fetch_prices_from_page(url: str) -> list[int]:
             log.warning("Didn't detect ₪ text within timeout, continuing anyway")
 
         body_text = page.inner_text("body")
+        page_title = page.title()
         browser.close()
 
     # תבניות אפשריות: "₪1,234" / "₪ 1,234" / "1,234 ₪"
@@ -156,6 +178,14 @@ def fetch_prices_from_page(url: str) -> list[int]:
 
     # מסננים מחירים לא סבירים (חוסם רעש כמו מספרי טלפון/שנים שנתפסו בטעות)
     prices = [p for p in prices if 300 <= p <= 100000]
+
+    if not prices:
+        # לוג דיאגנוסטי - עוזר להבין למה לא נמצאו מחירים (מסך הסכמה? captcha?
+        # דף לא נטען? שינוי מבנה?) בלי לחשוף מידע רגיש
+        snippet = body_text[:400].replace("\n", " ")
+        log.info(f"DEBUG page title: {page_title!r}")
+        log.info(f"DEBUG body snippet: {snippet!r}")
+
     return prices
 
 
