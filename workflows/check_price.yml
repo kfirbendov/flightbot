@@ -1,0 +1,48 @@
+name: Flight Price Check
+
+on:
+  schedule:
+    # רץ כל 20 דקות. הערה: GitHub לא מבטיח דיוק מושלם בזמנים -
+    # בשעות עומס יכול להיות איחור של כמה דקות, זה תקין ונורמלי.
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}  # מאפשר גם הרצה ידנית מכפתור "Run workflow" בטאב Actions
+
+permissions:
+  contents: write  # כדי שהבוט יוכל לשמור את היסטוריית המחירים בחזרה לריפו
+
+jobs:
+  check-price:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run price check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ORIGIN: "Tel Aviv"
+          DESTINATION: "Bangkok"
+          AIRLINE: "El Al"
+          START_DATE: "2026-09-07"
+          END_DATE: "2026-09-10"
+          PRICE_THRESHOLD_NIS: "2000"
+        run: python3 flight_price_monitor.py
+
+      - name: Save price history back to the repo
+        run: |
+          git config user.name "flight-price-bot"
+          git config user.email "actions@github.com"
+          git add data/ || true
+          git diff --staged --quiet || git commit -m "Update price history [skip ci]"
+          git push || true
